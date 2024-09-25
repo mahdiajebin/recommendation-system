@@ -1,8 +1,44 @@
 from flask import Flask, jsonify
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors
-
+from flask import request
 app = Flask(__name__)
+
+
+# route to accept new ratings and update matrix
+@app.route('/rate', methods=['POST'])
+def add_rating():
+    data = request.get_json()
+
+    user_id = data['user_id']
+    item_id = data['item_id']
+    rating  =  data['rating']
+    
+
+    # check if user and item exist in the matrix
+    if user_id >= user_item_matrix.shape[0]:
+        #if user is new ad them to the matrix 
+        new_user_row = pd.Series([0] * user_item_matrix.shape[1], index=user_item_matrix.columns)
+        user_item_matrix.loc[user_id] = new_user_row
+    
+    if item_id not in user_item_matrix.columns:
+        # if the item is new add it o the matrix
+        user_item_matrix[item_id] =0
+    
+    #update the useritem matric with the new rating 
+    user_item_matrix.at[user_id,item_id] = rating
+
+    #update the knn model with the new user item matrix 
+    global user_item_matrix_np
+    user_item_matrix_np = user_item_matrix.values
+    knn.fit(user_item_matrix_np)
+
+    return jsonify({
+        'message': 'rating added successfully',
+        'user_id': user_id,
+        'item_id': item_id,
+        'rating': rating
+    }),200
 
 # Load the dataset and preprocess it
 column_names = ['user_id', 'item_id', 'rating', 'timestamp']
