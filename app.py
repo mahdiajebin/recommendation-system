@@ -55,6 +55,15 @@ user_item_matrix_np = user_item_matrix.values
 knn = NearestNeighbors(metric='cosine', algorithm='brute')
 knn.fit(user_item_matrix_np)
 
+# Train the KNN model for user-based recommendations
+user_knn = NearestNeighbors(metric='cosine', algorithm='brute')
+user_knn.fit(user_item_matrix_np)
+
+# Train the KNN model for item-based recommendations
+item_knn = NearestNeighbors(metric='cosine', algorithm='brute')
+item_knn.fit(user_item_matrix.T)  # Transpose the matrix for item-based recommendations
+
+
 def get_recommendations(user_id):
     # Check if user ID exists in the dataset
     if user_id >= user_item_matrix.shape[0]:
@@ -76,14 +85,59 @@ def get_recommendations(user_id):
     return [int(item) for item in recommended_items]
 
 # Sample route to return recommendations for a user
+# @app.route('/recommend/<int:user_id>', methods=['GET'])
+# def recommend(user_id):
+#     recommendations = get_recommendations(user_id)
+#     if isinstance(recommendations, dict) and 'error' in recommendations:
+#         return jsonify(recommendations), 404
+#     return jsonify({
+#         'user_id': user_id,
+#         'recommendations': recommendations
+#     })
+
+
+    #New function to get item-based recommendations
+def get_item_based_recommendations(user_id, num_recommendations=5):
+    # Check if user_id exists in the dataset
+    if user_id >= user_item_matrix.shape[0]:
+        return {"error": "User ID not found"}
+
+    # Get the user's ratings
+    user_ratings = user_item_matrix.iloc[user_id]
+
+    # Find items the user has rated highly (e.g., rating 4 or 5)
+    highly_rated_items = user_ratings[user_ratings >= 4].index.tolist()
+
+    # Find items similar to the highly rated ones
+    similar_items = set()
+    for item in highly_rated_items:
+        # Get the k nearest neighbors (similar items)
+        item_vector = user_item_matrix[item].values.reshape(1, -1)
+        distances, indices = item_knn.kneighbors(user_item_matrix.T.loc[item].values.reshape(1, -1), n_neighbors=num_recommendations + 1)
+
+        # Add similar items to the recommendation list
+        for idx in indices[0]:
+            if idx != item:  # Don't recommend the same item
+                similar_items.add(idx)
+    return list(similar_items)
+
+#Update the recommendation route to include item_based recommendation 
 @app.route('/recommend/<int:user_id>', methods=['GET'])
 def recommend(user_id):
-    recommendations = get_recommendations(user_id)
-    if isinstance(recommendations, dict) and 'error' in recommendations:
-        return jsonify(recommendations), 404
+    user_based_recommendations = get_recommendations(user_id)
+    item_based_recommendations = get_item_based_recommendations(user_id)
+
+    # Convert numpy.int64 to native int for JSON serialization
+    user_based_recommendations = [int(item) for item in user_based_recommendations]
+    item_based_recommendations = [int(item) for item in item_based_recommendations]
+
+    if isinstance(user_based_recommendations, dict) and 'error' in user_based_recommendations:
+        return jsonify(user_based_recommendations), 404
+    
     return jsonify({
         'user_id': user_id,
-        'recommendations': recommendations
+        'user_based_recommendations': user_based_recommendations,
+        'item_based_recommendations': item_based_recommendations
     })
 
 if __name__ == '__main__':
